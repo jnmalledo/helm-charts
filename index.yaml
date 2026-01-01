@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  mysql-rrc:
+  - apiVersion: v2
+    appVersion: 1.1.0
+    created: "2026-01-01T19:04:13.597322689+01:00"
+    description: MySQL Read Replica Cluster based on Kubernetes StatefulSet
+    digest: 330e4c2007464f46c8cee9d94aa5cde514b7225556d535c1e3306b1614c56d50
+    name: mysql-rrc
+    type: application
+    urls:
+    - https://jnmalledo.github.io/helm-charts/mysql-rrc-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-01-01T19:04:13.59544403+01:00"
