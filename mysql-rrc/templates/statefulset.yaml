@@ -1,0 +1,200 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mysql-rrc.fullname" . }}
+  labels:
+    {{- include "mysql-rrc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "mysql-rrc.selectorLabels" . | nindent 6 }}
+  serviceName: {{ .Values.headlessServiceName }}
+  {{- with .Values.podSecurityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.pvcRetentionPolicy }}
+  persistentVolumeClaimRetentionPolicy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  replicas: {{ .Values.replicaCount }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "mysql-rrc.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      {{- range $pullSecret := .Values.imagePullSecrets }}
+      - name: {{ $pullSecret.name }}
+      {{- end }}
+      {{- end }}
+      serviceAccountName: {{ include "mysql-rrc.serviceAccountName" . }}
+      initContainers:
+      - name: rrc-pre
+        image: {{ .Values.rrcImage.repository }}:{{ .Values.rrcImage.tag }}
+        imagePullPolicy: {{ .Values.rrcImage.pullPolicy }}
+        command: ["/opt/rrc/rrc-pre"]
+        {{- with .Values.rrcSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: RRC_HLSERVICE
+          valueFrom:
+            secretKeyRef:
+              key: RRC_HLSERVICE
+              name: {{ .Values.mysqlSecretName }}          
+        volumeMounts:
+        - name: {{ .Values.mysqlDataVolumeName }}
+          mountPath: /var/lib/mysql
+      containers:
+      - name: rrc-mysql
+        image: {{ .Values.mysqlImage.repository }}:{{ .Values.mysqlImage.tag }}
+        imagePullPolicy: {{ .Values.mysqlImage.pullPolicy }}
+        command: ["/opt/rrc/rrc-run-mysqld"]
+        {{- with .Values.mysqlSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_ROOT_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_SOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_SOURCE_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_SOURCE_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_SOURCE_USER
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_BACKUP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_BACKUP_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_BACKUP_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_BACKUP_USER
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_DATABASE
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_USER
+              name: {{ .Values.mysqlSecretName }}
+        ports:
+        - name: mysql-port
+          containerPort: {{ .Values.mysqlServicePort }}
+        volumeMounts:
+        - name: {{ .Values.mysqlDataVolumeName }}
+          mountPath: /var/lib/mysql
+        - name: rrc-vol
+          mountPath: /opt/rrc
+        {{- with .Values.mysqlResources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.mysqlLivenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.mysqlReadinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      - name: rrc-post
+        image: {{ .Values.rrcImage.repository }}:{{ .Values.rrcImage.tag }}
+        imagePullPolicy: {{ .Values.rrcImage.pullPolicy }}
+        command: ["/opt/rrc/rrc-post"]
+        {{- with .Values.rrcSecurityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        env:
+        - name: RRC_HLSERVICE
+          valueFrom:
+            secretKeyRef:
+              key: RRC_HLSERVICE
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_SOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_SOURCE_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_SOURCE_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_SOURCE_USER
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_BACKUP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_BACKUP_PASSWORD
+              name: {{ .Values.mysqlSecretName }}
+        - name: MYSQL_BACKUP_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_BACKUP_USER
+              name: {{ .Values.mysqlSecretName }}
+        ports:
+        - name: clone-port
+          containerPort: {{ .Values.mysqlClonePort }}
+        volumeMounts:
+        - name: {{ .Values.mysqlDataVolumeName }}
+          mountPath: /var/lib/mysql
+        {{- with .Values.rrcResources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      volumes:
+      - name: rrc-vol
+        configMap:
+          defaultMode: 0775
+          name: {{ .Values.rrcScriptsConfigmapName }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: {{ .Values.mysqlDataVolumeName }}
+    spec:
+      {{- if .Values.mysqlDataStorageClass }}
+      storageClassName: {{ .Values.mysqlDataStorageClass | quote }}
+      {{- end }}
+      accessModes: 
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{ .Values.mysqlDataVolumeSize | quote }}

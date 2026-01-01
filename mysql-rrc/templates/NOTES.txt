@@ -1,0 +1,41 @@
+This chart deploys a MySQL Read Replica Cluster (RRC) based on Kubernetes 
+StatefulSets. An RRC is a MySQL deploying option, containing one Source Instance 
+and several read-only instances, where update operations are not allowed.
+
+The chart will deploy the following Kubernetes resources, that can be customized
+via the values.yaml file
+
+1. Secrets
+   1.1. {{ .Values.mysqlSecretName }} (MySQL credentials)
+   {{- if .Values.imagePullSecrets }}
+   {{- range $pullSecret := .Values.imagePullSecrets }}
+   1.2. {{ $pullSecret.name }} (Registry pull credentials)
+   {{- end }}
+   {{- end }}
+2. Configmaps
+   2.1. {{ .Values.rrcScriptsConfigmapName }} (rrc scripts for the mysql-80 
+        container)
+   2.2. {{ .Values.dbDumpConfigmapName }} (a simple test database dump file)
+3. Services
+   3.1. {{ .Values.headlessServiceName }} (headless service for individual pod access)
+   3.2. {{ .Values.readonlyServiceName }} (regular ClusterIP service for 
+        read-only purposes)
+4. StatefulSet
+   4.1. {{ include "mysql-rrc.fullname" . }} (the RRC StatefulSet Resource)
+
+To configure pod access to RRC:
+1. Writer endpoint. For database update operations, like INSERT, UPDATE, 
+   DELETE, CREATE, etc, use the following endpoint: 
+        {{ include "mysql-rrc.fullname" . }}-0.{{ .Values.headlessServiceName }}
+2. Round-robin reader endpoint. For light select operations, 
+   you can use the following endpoint: 
+        {{ .Values.readonlyServiceName }}
+   Please note that SELECT operations might be attended by the primary Source
+   instance when you use this endpoint
+3. Heavy reader endpoint. For heavy select operations, use the following 
+   endpoint instead:
+        {{ include "mysql-rrc.fullname" . }}-n.{{ .Values.headlessServiceName }}
+   (n > 0)
+
+This chart include a test resource to load database with some data. To do so,
+just execute "helm test RELEASE-NAME"

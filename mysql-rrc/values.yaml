@@ -1,0 +1,231 @@
+# Default values for mysql-rrc
+# MySQL Read Replica Cluster (RRC) is a cluster formned by a single source 
+# (db writer) and several readers
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+################################################################################
+# Naming default
+################################################################################
+# This is to override the chart name while naming RRC chart objects
+nameOverride: "mysql"
+fullnameOverride: "mysql"
+
+
+################################################################################
+# StatefulSet defaults
+################################################################################
+# This will set the replicaset count
+replicaCount: 1
+
+# MySQL image: the MySQL core image
+mysqlImage:
+  repository: registry.redhat.io/rhel9/mysql-80
+  pullPolicy: Always
+  tag: "latest"
+
+# RRC image: The Percona Xtrabackup containers images
+rrcImage:
+  repository: quay.io/jnmalledo/sts-rrc-utils
+  pullPolicy: Always
+  tag: "1.1"
+
+################################################################################
+# Storage defaults
+################################################################################
+# StatefulSet MySQL data volume name (template)
+mysqlDataVolumeName: data-vol
+
+# StatefulSet MySQL Storage Class. Leave it empty if you want to define default 
+# storage class
+mysqlDataStorageClass: ""
+
+# StatefulSet MySQL PVC Retention Policy
+pvcRetentionPolicy:
+  whenDeleted: Delete
+  whenScaled: Retain
+
+# StatefulSet MySQL data volume size
+mysqlDataVolumeSize: 1Gi
+
+################################################################################
+# Service account defaults
+################################################################################
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+# .create: Specifies whether a service account should be created
+# .automount: Automatically mount a ServiceAccount's API credentials?
+# .annotations: Annotations to add to the service account
+# .name: The name of the service account to use. If not set and create is true, a name is generated using the fullname template
+serviceAccount:
+  create: false
+  automount: true
+  annotations: {}
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+podAnnotations: {}
+
+# This is for setting Kubernetes Labels to a Pod.
+podLabels: {}
+
+# This is for setting pod-level security context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# This is for setting container-level security context for MySQL container
+mysqlSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities: 
+    drop: 
+    - "ALL"
+  runAsNonRoot: true
+  seccompProfile: 
+    type: RuntimeDefault
+
+# This is for setting container-level security context for RRC container
+rrcSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities: 
+    drop: 
+    - "ALL"
+  runAsNonRoot: true
+  seccompProfile: 
+    type: RuntimeDefault
+
+# This is for setting node selector
+nodeSelector: {}
+
+# This is for setting tolerations
+tolerations: []
+
+# This is for setting affinity
+affinity: {}
+
+
+################################################################################
+# Services default
+################################################################################
+# RRC needs two running services
+# 1. The headless service is used to address individual pods within the cluster.
+#    For example, to access the source instance, the following host shoud be used:
+#       fullnameOverride-0.headlessServiceName
+#    To access the second read replica,
+#       fullnameOverride-2.headlessServiceName
+headlessServiceName: interconnect
+
+# 2. The readonly service is used to address any pod within the RRC (including the
+#    source instance) in a round-robin fashion for read purposes (SELECTS only!)
+readonlyServiceName: mysql-read
+
+# RRC pods publish two ports
+# 1. MySQL service port (usually 3306)
+mysqlServicePort: 3306
+
+# 2. Clone port. This is used by the "right buddy" to initiate a clone
+#    IMPORTANT: it doesn't support tcp probes! 
+mysqlClonePort: 3307
+
+
+################################################################################
+# Secrets and Configmap default
+################################################################################
+# The name of the secret where MySQL instance required environment variables
+# are stored. The following variables are needed:
+#  MYSQL_ROOT_PASSWORD: Instances password for the root user
+#  MYSQL_USER: Instance user name for user database
+#  MYSQL_PASSWORD: Instance user password
+#  MYSQL_DATABASE: Name of the user database
+#  MYSQL_SOURCE_USER: This user is for replication purposes, avoiding using root credentials
+#  MYSQL_SOURCE_PASSWORD: Replication user password
+#  MYSQL_BACKUP_USER: This user is for clone purposes, avoiding using root credentials
+#  MYSQL_BACKUP_PASSWORD: Backup user password
+#  RRC_HLSERVICE: Name of the headless service
+mysqlSecretName: mysql-creds
+
+# Default values for MySQL instance required environment variables stored in mysqlSecretName secret
+# Initialization order
+#   1.   Existing secret data, if secret exists
+#   2.   values.yaml default data, if variable value is not empty
+#   3.1. A fixed string for non-password variables, if variable value is empty
+#   3.2. A 32 bytes random string for password variables, if variable value is not empty
+
+#  MYSQL_ROOT_PASSWORD: Default instances password for the root user
+mysqlRootPassword: "myrootpassword"
+
+#  MYSQL_USER: Default instance user name for user database
+mysqlUser: zoouser
+
+#  MYSQL_PASSWORD: Default instance user password
+mysqlPassword: "zoopassword"
+
+#  MYSQL_DATABASE: Default name of the user database
+mysqlDatabase: animal
+
+#  MYSQL_SOURCE_USER: Default replication user name (for replication purposes)
+mysqlReplicaUser: replicator
+
+#  MYSQL_SOURCE_PASSWORD: Default replication user password
+mysqlReplicaPassword: "replicatorpassword"
+
+#  MYSQL_BACKUP_USER: Default backup user name (for clone purposes)
+mysqlCloneUser: backupuser
+
+#  MYSQL_BACKUP_PASSWORD: Default backup user password
+mysqlClonePassword: "backuppassword"
+
+# Image pull secrets (empty list if none is needed)
+imagePullSecrets:
+- name: rh-registry-creds
+  registryURL: registry.redhat.io
+  accessToken: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=="
+
+# Name of the RRC scripts config map
+# This is used to store MySQL alternative startup scripts in a StatefulSet RRC context
+# and will be mounted on /opt/rcc in a standard MySQL container image
+rrcScriptsConfigmapName: rrc-scripts
+
+# Name of a small database dump (for testing purposes)
+dbDumpConfigmapName: dbdump
+
+################################################################################
+# Resources and Probes
+################################################################################
+# Resources for mysql main container
+mysqlResources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 200m
+    memory: 512Mi
+
+# Resources for rrc sidecar container
+rrcResources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 100m
+    memory: 256Mi
+
+# Liveness probe for mysql main container
+mysqlLivenessProbe:
+  exec:
+    command: ["/opt/rrc/rrc-instance-alive"]
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+# Readiness probe for mysql main container
+mysqlReadinessProbe:
+  exec:
+    command: ["/opt/rrc/rrc-instance-ready"]
+  initialDelaySeconds: 30
+  periodSeconds: 2
+  timeoutSeconds: 1
+
+
+################################################################################
+# Testing resources
+################################################################################
+mysqlTestSourceCommand: "SOURCE /mnt/test/db.dump"

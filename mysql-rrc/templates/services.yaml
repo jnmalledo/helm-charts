@@ -1,0 +1,37 @@
+# Headless service for stable DNS entries of StatefulSet members.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.headlessServiceName }}
+  labels:
+    {{- include "mysql-rrc.labels" . | nindent 4 }}
+spec:
+  ports:
+  - name: mysql-port
+    port: {{ .Values.mysqlServicePort }}
+  - name: mysql-clone
+    port: {{ .Values.mysqlClonePort }}
+  clusterIP: None
+  selector:
+    {{- include "mysql-rrc.selectorLabels" . | nindent 4 }}
+  publishNotReadyAddresses: true
+  type: ClusterIP
+---
+# Client service for connecting to any MySQL instance for reads.
+# For writes, you must instead connect to the primary: mysql-0.mysql.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.readonlyServiceName }}
+  labels:
+    {{- include "mysql-rrc.labels" . | nindent 4 }}
+    readonly: "true"
+spec:
+  ports:
+  - name: mysql-port
+    port: {{ .Values.mysqlServicePort }}
+  selector:
+    {{- include "mysql-rrc.selectorLabels" . | nindent 4 }}
+  type: ClusterIP
+
+
